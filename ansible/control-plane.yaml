@@ -1,0 +1,9 @@
+---
+  - hosts: control-plane
+    name: "Bootstrap Kubernetes Control Plane"
+    roles:
+      - name: kubeadm init
+        role: kubeadm-init
+
+      - name: install calico
+        role: calico

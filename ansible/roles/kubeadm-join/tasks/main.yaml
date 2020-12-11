@@ -1,0 +1,9 @@
+- name: copy kubeadm join config
+  become: yes
+  template:
+    src: kubeadm-join.yaml
+    dest: /etc/kubeadm-join.yaml
+
+- name: running kubeadm join
+  become: yes
+  command: kubeadm join --config /etc/kubeadm-join.yaml

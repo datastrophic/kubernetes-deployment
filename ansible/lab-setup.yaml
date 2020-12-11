@@ -1,0 +1,24 @@
+---
+- hosts: all
+  name: "Lab-specific configuration"
+  tasks:
+    - name: configure DNS server
+      become: yes
+      lineinfile:
+        path: /etc/systemd/resolved.conf
+        regexp: "^#DNS="
+        line: "DNS={{ lab.dns }}"
+
+    - name: configure DNS cache
+      become: yes
+      lineinfile:
+        path: /etc/systemd/resolved.conf
+        regexp: "^#Cache="
+        line: "Cache=yes"
+
+    - name: restart systemd-resolved
+      become: yes
+      systemd:
+        state: restarted
+        daemon_reload: yes
+        name: systemd-resolved

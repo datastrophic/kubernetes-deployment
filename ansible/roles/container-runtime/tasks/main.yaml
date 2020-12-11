@@ -1,0 +1,68 @@
+- name: create config and data dirs
+  become: yes
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0600"
+  with_items:
+    - /etc/containerd
+    - /tmp/containerd
+
+- name : download and install runc
+  become: yes
+  get_url:
+    url: "{{ packages.runc_download_url }}"
+    dest: /usr/local/bin/runc
+    mode: 0700
+
+- name : download and install crictl
+  become: yes
+  unarchive:
+    src: "{{ packages.crictl_download_url }}"
+    dest: /usr/local/bin
+    mode: 0700
+    remote_src: yes
+
+- name : download containerd
+  become: yes
+  unarchive:
+    src: "{{ packages.containerd_download_url }}"
+    dest: /tmp/containerd
+    remote_src: yes
+    extra_opts: [--strip-components=1]
+
+- name : copy containerd binaries
+  become: yes
+  shell: "find /tmp/containerd -type f | xargs -I {} mv {} /bin/"
+
+# Configure containerd
+- name: copy containerd config
+  become: yes
+  template:
+    src: containerd-config.toml
+    dest: /etc/containerd/config.toml
+
+- name: create containerd systemd service
+  become: yes
+  template:
+    src: containerd.service
+    dest: /etc/systemd/system/containerd.service
+
+# Starting containrd systemd service
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+  become: yes
+
+- name: enable containerd systemd service
+  systemd:
+    name: containerd
+    enabled: yes
+  become: yes
+
+- name: start containerd service
+  systemd:
+    name: containerd
+    state: started
+  become: yes

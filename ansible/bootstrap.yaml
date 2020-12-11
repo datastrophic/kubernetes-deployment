@@ -1,0 +1,12 @@
+---
+  - hosts: all
+    name: "Bootstrapping hosts"
+    roles:
+      - name: base setup
+        role: commons
+
+#      - name: installing container runtime
+#        role: container-runtime
+#
+#      - name: downloading Kubernetes dependencies
+#        role: kubernetes-packages

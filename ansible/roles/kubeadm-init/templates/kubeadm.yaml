@@ -1,0 +1,35 @@
+# Link to API docs: https://godoc.org/k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta2
+
+apiVersion: kubeadm.k8s.io/v1beta2
+kind: ClusterConfiguration
+clusterName: "{{ kubernetes.name }}"
+kubernetesVersion: "{{ kubernetes.version }}"
+certificatesDir: /etc/kubernetes/pki
+apiServer:
+  extraArgs:
+    authorization-mode: Node,RBAC
+#    enable-admission-plugins: NamespaceLifecycle,NodeRestriction,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota
+  timeoutForControlPlane: 4m0s
+controllerManager: {}
+scheduler: {}
+dns:
+  type: CoreDNS
+etcd:
+  local:
+    dataDir: /var/lib/etcd
+networking:
+  dnsDomain: "{{ networking.domain }}"
+  podSubnet: "{{ networking.pod_subnet }}"
+  serviceSubnet: "{{ networking.service_subnet }}"
+---
+apiVersion: kubeadm.k8s.io/v1beta2
+kind: InitConfiguration
+nodeRegistration:
+  criSocket: "unix:///run/containerd/containerd.sock"
+  name: "{{ inventory_hostname }}"
+  taints:
+    - effect: NoSchedule
+      key: node-role.kubernetes.io/master
+localAPIEndpoint:
+  advertiseAddress: "{{ ansible_default_ipv4.address }}"
+  bindPort: 6443

@@ -1,0 +1,9 @@
+- name: copy Calico manifests
+  become: yes
+  template:
+    src: calico.yaml
+    dest: /etc/calico.yaml
+
+- name: install Calico
+  become: yes
+  command: kubectl apply -f /etc/calico.yaml --kubeconfig=/etc/kubernetes/admin.conf
