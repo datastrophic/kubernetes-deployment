@@ -1,6 +1,6 @@
 # Link to API docs: https://godoc.org/k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta2
 
-apiVersion: kubeadm.k8s.io/v1beta2
+apiVersion: kubeadm.k8s.io/v1beta3
 kind: ClusterConfiguration
 clusterName: "{{ kubernetes.name }}"
 kubernetesVersion: "{{ kubernetes.version }}"
@@ -22,7 +22,7 @@ networking:
   podSubnet: "{{ networking.pod_subnet }}"
   serviceSubnet: "{{ networking.service_subnet }}"
 ---
-apiVersion: kubeadm.k8s.io/v1beta2
+apiVersion: kubeadm.k8s.io/v1beta3
 kind: InitConfiguration
 nodeRegistration:
   criSocket: "unix:///run/containerd/containerd.sock"
