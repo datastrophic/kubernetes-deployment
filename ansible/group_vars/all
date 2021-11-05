@@ -1,6 +1,6 @@
 kubernetes:
   name: k8s-homelab
-  version: v1.20.0
+  version: v1.21.6
 
 networking:
   domain: cluster.local
@@ -8,9 +8,9 @@ networking:
   service_subnet: 10.96.0.0/12
 
 packages:
-  containerd_download_url: https://github.com/containerd/containerd/releases/download/v1.3.6/containerd-1.3.6-linux-amd64.tar.gz
-  crictl_download_url: https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.18.0/crictl-v1.18.0-linux-amd64.tar.gz
-  runc_download_url: https://github.com/opencontainers/runc/releases/download/v1.0.0-rc91/runc.amd64
+  containerd_download_url: https://github.com/containerd/containerd/releases/download/v1.5.7/containerd-1.5.7-linux-amd64.tar.gz
+  crictl_download_url: https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.22.0/crictl-v1.22.0-linux-amd64.tar.gz
+  runc_download_url: https://github.com/opencontainers/runc/releases/download/v1.0.2/runc.amd64
 
 local:
   artifact_dir: .run
@@ -18,4 +18,4 @@ local:
   cert_hash_file: .run/cert-hash
 
 lab:
-  dns: 192.168.88.1
+  dns: 192.168.50.1

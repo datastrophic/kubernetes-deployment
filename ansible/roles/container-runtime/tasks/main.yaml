@@ -48,7 +48,7 @@
     src: containerd.service
     dest: /etc/systemd/system/containerd.service
 
-# Starting containrd systemd service
+# Starting containerd systemd service
 
 - name: reload systemd
   systemd:

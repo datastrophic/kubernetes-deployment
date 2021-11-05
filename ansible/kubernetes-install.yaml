@@ -1,15 +1,5 @@
 ---
 
-#  - import_playbook: control-plane.yaml
-#  - import_playbook: worker-nodes.yaml
-
-  - hosts: control-plane
-    name: "Copy kubeconfig from remote"
-    tasks:
-      - name: fetching
-        become: yes
-        fetch:
-          src: /etc/kubernetes/admin.conf
-          dest: admin.conf
-          flat: yes
-        run_once: True
+- import_playbook: control-plane.yaml
+- import_playbook: worker-nodes.yaml
+- import_playbook: kubernetes-fetch-config.yaml

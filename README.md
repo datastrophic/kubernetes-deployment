@@ -9,19 +9,18 @@ functional Kubernetes cluster for on-premises including support for `LoadBalance
 service types, ingress, and storage.
 
 Software used:
-* `Ansible` for deployment automation 
+* `Ansible` for deployment automation
 * `kubeadm` for Kubernetes cluster bootstrapping
 * `containerd` container runtime
 * `Calico` for pod networking
 * `MetalLB` for exposing `LoadBalancer` type services
 * `Istio` for ingress and traffic management
-* [TODO]: storage
 
 ## Pre-requisites
 * cluster machines/VMs should be provisioned and accessible over SSH
 * it is recommended to use Ubuntu 20.04 as cluster OS
 * the current user should have superuser privileges on the cluster nodes
-* Ansible installed locally 
+* Ansible installed locally
 
 ## Quickstart
 Installation consists of the following phases:
@@ -51,7 +50,7 @@ control-plane-1.k8s.cluster   Ready    control-plane,master   15h   v1.20.0
 worker-1                      Ready    <none>                 15h   v1.20.0
 worker-2                      Ready    <none>                 15h   v1.20.0
 worker-3                      Ready    <none>                 15h   v1.20.0
-``` 
+```
 
 Consider running [sonobuoy](https://sonobuoy.io/) conformance test to validate the cluster configuration and health.    
 
@@ -60,4 +59,3 @@ To uninstall Kubernetes, run:
 ansible-playbook -i ansible/inventory.yaml ansible/kubernetes-reset.yaml -K
 ```
 This playbook will run `kubeadm reset` on all nodes, remove configuration changes, and stop Kubelets.
- 
