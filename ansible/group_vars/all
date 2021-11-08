@@ -20,3 +20,4 @@ local:
 
 lab:
   dns: 192.168.50.1
+  metallb_address_range: 192.168.50.150-192.168.50.160

@@ -1,0 +1,6 @@
+---
+- hosts: control-plane
+  name: "Install MetalLB"
+  roles:
+    - role: metallb
+      run_once: True

@@ -1,0 +1,23 @@
+- name: copy MetalLB manifests
+  become: yes
+  template:
+    src: metallb.yaml
+    dest: /etc/metallb.yaml
+
+- name: copy MetalLB config
+  become: yes
+  template:
+    src: metallb-config.yaml
+    dest: /etc/metallb-config.yaml
+
+- name: create namespace
+  become: yes
+  command: kubectl create namespace metallb-system --kubeconfig=/etc/kubernetes/admin.conf
+
+- name: install MetalLB config
+  become: yes
+  command: kubectl apply -f /etc/metallb-config.yaml --kubeconfig=/etc/kubernetes/admin.conf
+
+- name: install MetalLB
+  become: yes
+  command: kubectl apply -f /etc/metallb.yaml --kubeconfig=/etc/kubernetes/admin.conf
