@@ -15,9 +15,9 @@
   become: yes
   apt:
     pkg:
-      - "kubeadm={{ kubernetes.version }}"
-      - "kubectl={{ kubernetes.version }}"
-      - "kubelet={{ kubernetes.version }}"
+      - "kubeadm={{ kubernetes.apt_version }}"
+      - "kubectl={{ kubernetes.apt_version }}"
+      - "kubelet={{ kubernetes.apt_version }}"
     update_cache: yes
 
 - name: hold kubeadm, kubectl, kubelet

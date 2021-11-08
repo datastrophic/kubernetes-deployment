@@ -6,6 +6,6 @@
       become: yes
       fetch:
         src: /etc/kubernetes/admin.conf
-        dest: admin.conf
+        dest: ../admin.conf
         flat: yes
       run_once: True

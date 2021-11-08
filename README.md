@@ -45,11 +45,11 @@ Once the playbook run completes, a kubeconfig file `admin.conf` will be fetched 
 the cluster is up and available, run:
 ```
 $> kubectl --kubeconfig=admin.conf get nodes
-NAME                          STATUS   ROLES                  AGE   VERSION
-control-plane-1.k8s.cluster   Ready    control-plane,master   15h   v1.20.0
-worker-1                      Ready    <none>                 15h   v1.20.0
-worker-2                      Ready    <none>                 15h   v1.20.0
-worker-3                      Ready    <none>                 15h   v1.20.0
+NAME                          STATUS   ROLES                  AGE     VERSION
+control-plane-0.k8s.cluster   Ready    control-plane,master   4m40s   v1.21.6
+worker-0                      Ready    <none>                 4m5s    v1.21.6
+worker-1                      Ready    <none>                 4m5s    v1.21.6
+worker-2                      Ready    <none>                 4m4s    v1.21.6
 ```
 
 Consider running [sonobuoy](https://sonobuoy.io/) conformance test to validate the cluster configuration and health.    

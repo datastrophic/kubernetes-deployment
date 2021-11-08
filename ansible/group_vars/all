@@ -1,6 +1,7 @@
 kubernetes:
   name: k8s-homelab
   version: v1.21.6
+  apt_version: 1.21.6-00
 
 networking:
   domain: cluster.local
