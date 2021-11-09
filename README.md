@@ -90,3 +90,110 @@ kubectl get svc istio-ingressgateway --namespace istio-system
 NAME                   TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)                                      AGE
 istio-ingressgateway   LoadBalancer   10.107.130.40   192.168.50.150   15021:30659/TCP,80:31754/TCP,443:32354/TCP   75s
 ```
+
+## Verifying the setup
+To verify the installation, MetalLB, Ingress Gateway, and Istio configuration let's create
+a simple `Deployment` and expose it using `VirtualService`.
+
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: nginx
+  type: ClusterIP
+
+```
+
+To verify the deployment, run:
+```
+ kubectl port-forward service/nginx 8080:80
+ ```
+ The Nginx deployment should be available at [localhost:8080](http://localhost:8080/).
+
+ Now, let's expose the deployment via Istio ingress gateway. For that, we need to
+ [configure ingress via Istio Gateway](https://istio.io/latest/docs/tasks/traffic-management/ingress/ingress-control/)
+ and [create a VirtualService](https://istio.io/latest/docs/reference/config/networking/virtual-service/) to route the traffic to Nginx deployment:
+ ```
+ apiVersion: networking.istio.io/v1alpha3
+ kind: Gateway
+ metadata:
+   name: nginx-gateway
+ spec:
+   selector:
+     # Use the default Ingress Gateway installed by Istio
+     istio: ingressgateway
+   servers:
+   - port:
+       number: 80
+       name: http
+       protocol: HTTP
+     hosts:
+     - "*"
+
+ ---
+ apiVersion: networking.istio.io/v1beta1
+ kind: VirtualService
+ metadata:
+   name: nginx
+ spec:
+   hosts:
+   - "*"
+   gateways:
+   - nginx-gateway
+   http:
+   - name: "nginx-test"
+     match:
+     - uri:
+         prefix: "/nginx-test"
+     rewrite:
+       uri: "/"
+     route:
+     - destination:
+         host: nginx.default.svc.cluster.local
+         port:
+           number: 80
+```
+
+The `VirtualService` defines a prefix `prefix: "/nginx-test"` so that all requests
+to the `<Endpoint URL>/nginx-test` will be routed to the Nginx `Service`.
+
+To discover the endpoint URL of the Istio Ingress Gateway, run:
+```
+kubectl get svc istio-ingressgateway --namespace istio-system
+
+NAME                   TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)                                      AGE
+istio-ingressgateway   LoadBalancer   10.107.130.40   192.168.50.150   15021:30659/TCP,80:31754/TCP,443:32354/TCP   4h47m
+```
+
+The `EXTERNAL-IP` value is the value of the endpoint URL.
