@@ -71,6 +71,49 @@ To install MetalLB, run:
 ansible-playbook -i ansible/inventory.yaml ansible/metallb.yaml -K
 ```
 
+## Kubernetes Dashboard
+Install Kubernetes Dashboard following the [docs](https://kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard/). At the moment of writing, it is sufficient to run:
+```
+kubectl create -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.4.0/aio/deploy/recommended.yaml
+```
+
+To access the dashboard UI, run `kubectl proxy` and open this link in your browser:
+[localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/](http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/).
+
+To login into the Dashboard, it is recommended to create a user as per the [Dashboard docs](https://github.com/kubernetes/dashboard/blob/master/docs/user/access-control/creating-sample-user.md):
+```
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin-user
+  namespace: kubernetes-dashboard
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: admin-user
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: admin-user
+  namespace: kubernetes-dashboard
+```
+
+Once the user is created, we can get the login token:
+```
+kubectl -n kubernetes-dashboard get secret $(kubectl -n kubernetes-dashboard get sa/admin-user -o jsonpath="{.secrets[0].name}") -o go-template="{{.data.token | base64decode}}"
+```
+
+Alternatively, it is possible to use an default token from the `kube-system` namespace, however, the RBAC for it
+is more narrow and wouldn't allow to observe all the namespaces and resources:
+```
+ kubectl --namespace kube-system get secret -o name | grep default-token | xargs kubectl --namespace kube-system get -o jsonpath='{.data.token}'
+```
+
 ## Istio
 
 Istio provides multiple [installation options](https://istio.io/latest/docs/setup/install/).
@@ -91,10 +134,10 @@ NAME                   TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)  
 istio-ingressgateway   LoadBalancer   10.107.130.40   192.168.50.150   15021:30659/TCP,80:31754/TCP,443:32354/TCP   75s
 ```
 
-## Verifying the setup
+### Example deployment exposed via Istio Ingress Gateway
+#### Deploying Nginx
 To verify the installation, MetalLB, Ingress Gateway, and Istio configuration let's create
-a simple `Deployment` and expose it using `VirtualService`.
-
+a test Nginx `Deployment`:
 ```
 apiVersion: apps/v1
 kind: Deployment
@@ -132,57 +175,63 @@ spec:
   selector:
     app: nginx
   type: ClusterIP
-
 ```
 
 To verify the deployment, run:
 ```
  kubectl port-forward service/nginx 8080:80
  ```
- The Nginx deployment should be available at [localhost:8080](http://localhost:8080/).
+The Nginx welcome page should be available at [localhost:8080](http://localhost:8080/).
 
- Now, let's expose the deployment via Istio ingress gateway. For that, we need to
- [configure ingress via Istio Gateway](https://istio.io/latest/docs/tasks/traffic-management/ingress/ingress-control/)
- and [create a VirtualService](https://istio.io/latest/docs/reference/config/networking/virtual-service/) to route the traffic to Nginx deployment:
+#### Exposing Nginx deployment with Istio `Gateway` and `VirtualService`
+To expose a deployment via Istio ingress gateway it is first required to create a [Gateway](https://istio.io/latest/docs/tasks/traffic-management/ingress/ingress-control/).
+
+We will create a shared `Gateway` in the `istio-system` namespace with a wildcard host pattern so it can be reused
+by other deployments. The deployments will be routed by the `VirtualServices` using the URL path later on.
+It is also possible to create a `Gateway` per application but for the demo purposes, a path-based routing
+seems to be more convenient.
+```
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: shared-gateway
+  namespace: istio-system
+spec:
+  selector:
+    # Use the default Ingress Gateway installed by Istio
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "*"
+```
+
+Now, we should define the route and [create a VirtualService](https://istio.io/latest/docs/reference/config/networking/virtual-service/) to route the traffic to Nginx `Service`:
  ```
- apiVersion: networking.istio.io/v1alpha3
- kind: Gateway
- metadata:
-   name: nginx-gateway
- spec:
-   selector:
-     # Use the default Ingress Gateway installed by Istio
-     istio: ingressgateway
-   servers:
-   - port:
-       number: 80
-       name: http
-       protocol: HTTP
-     hosts:
-     - "*"
-
- ---
- apiVersion: networking.istio.io/v1beta1
- kind: VirtualService
- metadata:
-   name: nginx
- spec:
-   hosts:
-   - "*"
-   gateways:
-   - nginx-gateway
-   http:
-   - name: "nginx-test"
-     match:
-     - uri:
-         prefix: "/nginx-test"
-     rewrite:
-       uri: "/"
-     route:
-     - destination:
-         host: nginx.default.svc.cluster.local
-         port:
-           number: 80
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+ name: nginx
+spec:
+ hosts:
+ - "*"
+ gateways:
+ - nginx-gateway
+ http:
+ - name: "nginx-test"
+   match:
+   - uri:
+       prefix: "/nginx-test"
+   rewrite:
+     uri: "/"
+   route:
+   - destination:
+       host: nginx.default.svc.cluster.local
+       port:
+         number: 80
 ```
 
 The `VirtualService` defines a prefix `prefix: "/nginx-test"` so that all requests
