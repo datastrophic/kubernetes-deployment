@@ -246,3 +246,94 @@ istio-ingressgateway   LoadBalancer   10.107.130.40   192.168.50.150   15021:306
 ```
 
 The `EXTERNAL-IP` value is the value of the endpoint URL.
+
+## Container Attached Storage
+There is a plenty of storage solutions on Kubernetes. At the moment of writing,
+[OpenEBS](https://openebs.io/) looked like a good fit for having storage installed
+with minimal friction.
+
+For the homelab setup, a [local hostpath](https://openebs.io/docs/user-guides/localpv-hostpath)
+provisioner should be sufficient, however, OpenEBS provides multiple options for
+a replicated storage backing Persistent Volumes.
+
+To use only host-local Persistent Volumes, it is sufficient to install a lite
+version of OpenEBS:
+```
+kubectl apply -f https://openebs.github.io/charts/openebs-operator-lite.yaml
+```
+
+Once the Operator is installed, create a `StorageClass` and annotate it as **default**:
+```
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: openebs-hostpath
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+    openebs.io/cas-type: local
+    cas.openebs.io/config: |
+      - name: StorageType
+        value: "hostpath"
+      - name: BasePath
+        value: "/var/openebs/local/"
+provisioner: openebs.io/local
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+```
+
+## Verifying the installation
+The following instructions are based on the official [OpenEBS documentation](https://openebs.io/docs/user-guides/localpv-hostpath#install-verification).
+
+Create a `PersistentVolumeClaim`:
+```
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: local-hostpath-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1G
+```
+
+Create a `Pod` to consume the PVC:
+```
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-openebs-volume
+spec:
+  volumes:
+  - name: local-storage
+    persistentVolumeClaim:
+      claimName: local-hostpath-pvc
+  containers:
+  - name: main
+    image: busybox
+    command:
+       - sh
+       - -c
+       - 'while true; do echo "`date` [`hostname`] Hello from OpenEBS Local PV." >> /mnt/store/greet.txt; sleep $(($RANDOM % 5 + 300)); done'
+    volumeMounts:
+    - mountPath: /mnt/store
+      name: local-storage
+```
+
+Verify the data is written to the volume:
+```
+kubectl exec test-openebs-volume -- cat /mnt/store/greet.txt
+
+# Example output:
+Fri Nov 12 01:22:22 UTC 2021 [test-openebs-volume] Hello from OpenEBS Local PV.
+```
+
+You might also want to `kubectl describe pod test-openebs-volume` to check the details
+about the mounted volume.
+
+Cleanup:
+```
+kubectl delete pod test-openebs-volume
+kubectl delete pvc local-hostpath-pvc
+```
