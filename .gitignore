@@ -1,3 +1,6 @@
 .idea/
 .run/
 admin.conf
+*.pem
+*.csr
+csr.json

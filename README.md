@@ -235,17 +235,173 @@ spec:
 ```
 
 The `VirtualService` defines a prefix `prefix: "/nginx-test"` so that all requests
-to the `<Endpoint URL>/nginx-test` will be routed to the Nginx `Service`.
-
-To discover the endpoint URL of the Istio Ingress Gateway, run:
+to the `<Enpoint URL>/nginx-test` will be routed to the Nginx `Service`.
+The endpoint URL is a load balancer address of the Istio Ingress Gateway.
+It comes handy to discover and export it to an environment variable for later use:
 ```
-kubectl get svc istio-ingressgateway --namespace istio-system
-
-NAME                   TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)                                      AGE
-istio-ingressgateway   LoadBalancer   10.107.130.40   192.168.50.150   15021:30659/TCP,80:31754/TCP,443:32354/TCP   4h47m
+export INGRESS_HOST=$(kubectl get svc istio-ingressgateway --namespace istio-system -o yaml -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 ```
 
-The `EXTERNAL-IP` value is the value of the endpoint URL.
+Now, we can verify that the deployment is exposed via the gateway at `http://$INGRESS_HOST/nginx-test`.
+
+## Secure Istio Gateways and Cert-manager
+In order to expose a service via HTTPS, it is required to configure a secure
+Istio Gateway. For this task, we will use cert-manager to issue a certificate
+for the Istio IngressGateway address and provide it to the Secure `Gateway`.
+
+To install the Cert-manager, run:
+```
+kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.6.0/cert-manager.yaml
+```
+
+### Create a Certificate Authority
+First, we need to create a CA key and certificate to provide to the Cert-manager
+`ClusterIssuer`. The CA is meant to function as an internal tool for creating certificates.
+We will use [cfssl](https://github.com/cloudflare/cfssl) but any other appropriate
+tool can be used instead.
+
+Create a CSR (Certificate Signing Request) file in json format. For example, `csr.json`:
+```json
+{
+    "CN": "Homelab, Inc.",
+    "key": {
+           "algo": "rsa",
+           "size": 2048
+    },
+    "names": [
+             {
+                    "C": "US",
+                    "L": "San Francisco",
+                    "O": "Homelab",
+                    "OU": "PVE",
+                    "ST": "California"
+             }
+    ]
+}
+```
+
+Then, run `cfssl` to generate the initial CA key and certificate:
+```
+cfssl gencert -initca csr.json | cfssljson -bare ca
+```
+
+Create a Kubernetes Secret to hold the key and certificate, as per [cert-manager docs](https://cert-manager.io/docs/configuration/ca/#deployment):
+```
+kubectl create secret tls ca-secret \
+  --cert=ca.pem \
+  --key=ca-key.pem
+```
+
+### Create an `Issuer` and issue a `Certificate` for the IngressGateway
+
+> It is important to deploy the certificate into the same namespace where the istio-ingressgateway
+is running so it can mount it. [Link to the documentation](https://istio.io/latest/docs/ops/integrations/certmanager/#istio-gateway).
+
+To create a self-signed `ClusterIssuer`, run:
+```
+kubectl apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: ca-issuer
+  namespace: istio-system
+spec:
+  ca:
+    secretName: ca-secret
+EOF
+```
+More issuer configuration options available in the [Cert-manager docs](https://cert-manager.io/docs/configuration/).
+
+Discover the `IngressGateway` IP address to use in the certificate:
+```
+export INGRESS_HOST=$(kubectl get svc istio-ingressgateway --namespace istio-system -o yaml -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+```
+
+The `Certificate` would look as follows (we'll be using the IP address from the previous step in the `ipAddresses` field):
+```
+kubectl apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: gateway-cert
+  namespace: istio-system
+spec:
+  secretName: gateway-cert
+  ipAddresses:
+  - "${INGRESS_HOST}"
+  duration: 2160h # 90d
+  renewBefore: 360h # 15d
+  subject:
+    organizations:
+      - Homelab
+  issuerRef:
+    name: ca-issuer
+    kind: Issuer
+EOF
+```
+
+Verify the `Certificate` is created:
+```
+kubectl get cert -o wide -n istio-system
+NAME           READY   SECRET         ISSUER      STATUS                                          AGE
+gateway-cert   True    gateway-cert   ca-issuer   Certificate is up to date and has not expired   5s
+```
+
+### Create a secure Istio `Gateway`
+Create a secure Istio `Gateway` that uses the certificate created at the previous step.
+The `Gateway` can be created in any namespace:
+```
+kubectl apply -f - <<EOF
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: secure-gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPs
+    tls:
+      mode: SIMPLE
+      credentialName: gateway-cert
+    hosts:
+    - "*"
+EOF
+```
+
+And now we need to create a `VirtualService` to route the traffic. We'll use the
+Nginx deployment from the [previous step](#example-deployment-exposed-via-istio-ingress-gateway).
+
+```
+kubectl apply -f - <<EOF
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+ name: nginx-secure
+spec:
+ hosts:
+ - "*"
+ gateways:
+ - secure-gateway
+ http:
+ - name: "nginx-secure"
+   match:
+   - uri:
+       prefix: "/nginx-secure"
+   rewrite:
+     uri: "/"
+   route:
+   - destination:
+       host: nginx.default.svc.cluster.local
+       port:
+         number: 80
+EOF
+```
+
+Now, we can verify that the deployment is exposed via the gateway at `https://$INGRESS_HOST/nginx-secure`.
 
 ## Container Attached Storage
 There is a plenty of storage solutions on Kubernetes. At the moment of writing,
@@ -264,6 +420,7 @@ kubectl apply -f https://openebs.github.io/charts/openebs-operator-lite.yaml
 
 Once the Operator is installed, create a `StorageClass` and annotate it as **default**:
 ```
+kubectl apply -f - <<EOF
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -279,6 +436,7 @@ metadata:
 provisioner: openebs.io/local
 volumeBindingMode: WaitForFirstConsumer
 reclaimPolicy: Delete
+EOF
 ```
 
 ## Verifying the installation
@@ -286,6 +444,7 @@ The following instructions are based on the official [OpenEBS documentation](htt
 
 Create a `PersistentVolumeClaim`:
 ```
+kubectl apply -f - <<EOF
 kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
@@ -296,10 +455,12 @@ spec:
   resources:
     requests:
       storage: 1G
+EOF
 ```
 
 Create a `Pod` to consume the PVC:
 ```
+kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Pod
 metadata:
@@ -319,6 +480,7 @@ spec:
     volumeMounts:
     - mountPath: /mnt/store
       name: local-storage
+EOF
 ```
 
 Verify the data is written to the volume:
