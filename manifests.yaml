@@ -1,0 +1,35 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: kubernetes-dashboard
+  namespace: kubernetes-dashboard
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - default/secure-gateway
+  http:
+  - match:
+    - uri:
+        prefix: "/dashboard"
+    - uri:
+        prefix: "/"
+    rewrite:
+      uri: "/"
+    route:
+    - destination:
+        host: kubernetes-dashboard.kubernetes-dashboard.svc.cluster.local
+        port:
+          number: 443
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: kubernetes-dashboard
+  name: kubernetes-dashboard
+spec:
+  host: kubernetes-dashboard.kubernetes-dashboard.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: SIMPLE

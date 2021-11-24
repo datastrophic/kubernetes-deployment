@@ -503,7 +503,10 @@ kubectl delete pvc local-hostpath-pvc
 
 ## Exposing Kubernetes Dashboard via Secure Istio Gateway
 
-**TODO:** add information on security implications
+> WARNING: Exposing unsecured Kubernetes Dashboard that has wide permissions (e.g. allowing
+workload creation) imposes a significant risk on the infrastructure. Check out
+[On Securing the Kubernetes Dashboard](https://blog.heptio.com/on-securing-the-kubernetes-dashboard-16b09b1b7aca)
+blog post from Heptio for more details.
 
 In order to expose the Kubernetes Dashboard via Istio Ingress Gaway, it is
 important to take into account that the Dashboard is running as a HTTPS service but
@@ -512,11 +515,11 @@ the upstream services. Istio provides a custom resource called `DestinationRule`
 that allows to define traffic and load balancing policies for the upstream services.
 
 > NOTE: In the following example, the Kubernetes Dashboard will be exposed at the
-root path of the URL: `https://<endpoint URL>/`. Making it available at a subpath
-turned out to be a time consuming initiative involving EnvoyFilter or Nginx
-Proxy Pods. None of these seems to be worth the effort for the HomeLab environment,
-so in this guide the Dashboard UI will be available at the root URL path of the
-Ingress.
+root path of the URL: `https://<endpoint URL>/`. There doesn't seem to be a
+way of making it available at a subpath with the `VirtualService` routing rules.
+The problem with the Dashboard is that its landing page doesn't provide a config
+for a prefix and refers static assets using the root path. Please let me know if
+there's a workaround for that.
 
 First, we need to define a `VirtualService` for routing:
 ```
