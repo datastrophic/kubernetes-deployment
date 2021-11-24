@@ -343,6 +343,7 @@ EOF
 Verify the `Certificate` is created:
 ```
 kubectl get cert -o wide -n istio-system
+
 NAME           READY   SECRET         ISSUER      STATUS                                          AGE
 gateway-cert   True    gateway-cert   ca-issuer   Certificate is up to date and has not expired   5s
 ```
@@ -498,4 +499,67 @@ Cleanup:
 ```
 kubectl delete pod test-openebs-volume
 kubectl delete pvc local-hostpath-pvc
+```
+
+## Exposing Kubernetes Dashboard via Secure Istio Gateway
+
+**TODO:** add information on security implications
+
+In order to expose the Kubernetes Dashboard via Istio Ingress Gaway, it is
+important to take into account that the Dashboard is running as a HTTPS service but
+the previously deployed `Gateway` terminates TLS and sends unencrypted traffic to
+the upstream services. Istio provides a custom resource called `DestinationRule`
+that allows to define traffic and load balancing policies for the upstream services.
+
+> NOTE: In the following example, the Kubernetes Dashboard will be exposed at the
+root path of the URL: `https://<endpoint URL>/`. Making it available at a subpath
+turned out to be a time consuming initiative involving EnvoyFilter or Nginx
+Proxy Pods. None of these seems to be worth the effort for the HomeLab environment,
+so in this guide the Dashboard UI will be available at the root URL path of the
+Ingress.
+
+```
+kubectl apply -f - <<EOF
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: kubernetes-dashboard
+  namespace: kubernetes-dashboard
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - default/secure-gateway
+  http:
+  - match:
+    - uri:
+        prefix: "/"
+    route:
+    - destination:
+        host: kubernetes-dashboard.kubernetes-dashboard.svc.cluster.local
+        port:
+          number: 443
+EOF
+```
+
+```
+kubectl apply -f - <<EOF
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: kubernetes-dashboard
+  name: kubernetes-dashboard
+spec:
+  host: kubernetes-dashboard.kubernetes-dashboard.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: SIMPLE
+EOF
+```
+
+Now, we can access the dashboard via the gateway at `https://$INGRESS_HOST/`.
+
+A shortcut for the Ingress host discovery:
+```
+export INGRESS_HOST=$(kubectl get svc istio-ingressgateway --namespace istio-system -o yaml -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 ```
