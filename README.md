@@ -518,6 +518,7 @@ Proxy Pods. None of these seems to be worth the effort for the HomeLab environme
 so in this guide the Dashboard UI will be available at the root URL path of the
 Ingress.
 
+First, we need to define a `VirtualService` for routing:
 ```
 kubectl apply -f - <<EOF
 apiVersion: networking.istio.io/v1beta1
@@ -542,6 +543,8 @@ spec:
 EOF
 ```
 
+After that, we need to create a `DestinationRule` to enable TLS for traffic
+accessing the Dashboard Service:
 ```
 kubectl apply -f - <<EOF
 apiVersion: networking.istio.io/v1beta1
