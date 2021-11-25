@@ -14,6 +14,7 @@ Software used:
 * `containerd` container runtime
 * `Calico` for pod networking
 * `MetalLB` for exposing `LoadBalancer` type services
+* `OpenEBS` for volume provisioning
 * `Istio` for ingress and traffic management
 
 ## Pre-requisites
@@ -21,6 +22,10 @@ Software used:
 * it is recommended to use Ubuntu 20.04 as cluster OS
 * the current user should have superuser privileges on the cluster nodes
 * Ansible installed locally
+
+## Bootstrapping infrastructure on Proxmox
+The [proxmox](proxmox) directory of this repo contains automation for the initial
+infrastructure bootstrapping using `cloud-init` templates and Proxmox Terraform provider.
 
 ## Quickstart
 Installation consists of the following phases:

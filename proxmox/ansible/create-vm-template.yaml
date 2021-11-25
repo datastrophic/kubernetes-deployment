@@ -1,0 +1,45 @@
+---
+- hosts: pve
+  gather_facts: no
+  name: "create VM template"
+  vars:
+    vm:
+      cloud_image_url: https://cloud-images.ubuntu.com/focal/current/focal-server-cloudimg-amd64.img
+      cloud_image_path: /tmp/ubuntu-2004-server-amd64.qcow2
+      template_id: 1001
+      template_name: ubuntu-2004-cloudinit-template
+      template_memory: 4096
+  tasks:
+    - name : download cloud image
+      get_url:
+        url: "{{ vm.cloud_image_url }}"
+        dest: "{{ vm.cloud_image_path }}"
+        mode: 0700
+
+    - name: create a VM to use as a template
+      command: "qm create {{ vm.template_id }} --name {{ vm.template_name }} --memory {{ vm.template_memory }} --net0 virtio,bridge=vmbr0"
+      become: yes
+
+    - name: import disk image
+      command: "qm importdisk {{ vm.template_id }} {{ vm.cloud_image_path }} local-lvm"
+      become: yes
+
+    - name: configure VM to use imported image
+      command: "qm set {{ vm.template_id }} --scsihw virtio-scsi-pci --scsi0 local-lvm:vm-{{ vm.template_id }}-disk-0"
+      become: yes
+
+    - name: add cloud-init image as CDROM
+      command: "qm set {{ vm.template_id }} --ide2 local-lvm:cloudinit"
+      become: yes
+
+    - name: configure boot from the image
+      command: "qm set {{ vm.template_id }} --boot c --bootdisk scsi0"
+      become: yes
+
+    - name: attach serial console
+      command: "qm set {{ vm.template_id }} --serial0 socket --vga serial0"
+      become: yes
+
+    - name: create template
+      command: "qm template {{ vm.template_id }}"
+      become: yes
