@@ -4,9 +4,12 @@ This repository contains a reference implementation of bootstrapping and install
 of a Kubernetes cluster on-premises. The provided tooling can be used both as a basis
 for personal projects and for educational purposes.
 
-The goal of the project is to provide tooling for a "one-click" deployment of a fully
-functional Kubernetes cluster for on-premises including support for `LoadBalancer`
-service types, ingress, and storage.
+The goal of the project is to provide tooling for reproducible deployment of a fully
+functional Kubernetes cluster for on-premises including support for dynamic
+provisioning of `PersistentVolumes` an `LoadBalancer` service types.
+
+A detailed description is available in
+[The Ultimate Kubernetes Homelab Guide: From Zero to Production Cluster On-Premises](https://datastrophic.io/kubernetes-homelab-with-proxmox-kubeadm-calico-openebs-and-metallb/) blog post.
 
 Software used:
 * `Ansible` for deployment automation
@@ -23,7 +26,7 @@ Software used:
 * the current user should have superuser privileges on the cluster nodes
 * Ansible installed locally
 
-## Bootstrapping infrastructure on Proxmox
+## Bootstrapping the infrastructure on Proxmox
 The [proxmox](proxmox) directory of this repo contains automation for the initial
 infrastructure bootstrapping using `cloud-init` templates and Proxmox Terraform provider.
 
@@ -65,6 +68,43 @@ ansible-playbook -i ansible/inventory.yaml ansible/kubernetes-reset.yaml -K
 ```
 This playbook will run `kubeadm reset` on all nodes, remove configuration changes, and stop Kubelets.
 
+## Persistent volumes with EBS
+There is a plenty of storage solutions on Kubernetes. At the moment of writing,
+[OpenEBS](https://openebs.io/) looked like a good fit for having storage installed
+with minimal friction.
+
+For the homelab setup, a [local hostpath](https://openebs.io/docs/user-guides/localpv-hostpath)
+provisioner should be sufficient, however, OpenEBS provides multiple options for
+a replicated storage backing Persistent Volumes.
+
+To use only host-local Persistent Volumes, it is sufficient to install a lite
+version of OpenEBS:
+```
+kubectl apply -f https://openebs.github.io/charts/openebs-operator-lite.yaml
+```
+
+Once the Operator is installed, create a `StorageClass` and annotate it as **default**:
+```
+kubectl apply -f - <<EOF
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: openebs-hostpath
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+    openebs.io/cas-type: local
+    cas.openebs.io/config: |
+      - name: StorageType
+        value: "hostpath"
+      - name: BasePath
+        value: "/var/openebs/local/"
+provisioner: openebs.io/local
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+EOF
+```
+
+To verify the installation, follow the official [OpenEBS documentation](https://openebs.io/docs/user-guides/localpv-hostpath#install-verification).
 
 ## MetalLB
 
@@ -79,14 +119,15 @@ ansible-playbook -i ansible/inventory.yaml ansible/metallb.yaml -K
 ## Kubernetes Dashboard
 Install Kubernetes Dashboard following the [docs](https://kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard/). At the moment of writing, it is sufficient to run:
 ```
-kubectl create -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.4.0/aio/deploy/recommended.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.4.0/aio/deploy/recommended.yaml
 ```
 
 To access the dashboard UI, run `kubectl proxy` and open this link in your browser:
 [localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/](http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/).
 
 To login into the Dashboard, it is recommended to create a user as per the [Dashboard docs](https://github.com/kubernetes/dashboard/blob/master/docs/user/access-control/creating-sample-user.md):
-```
+```shell
+kubectl apply -f - <<EOF
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -106,17 +147,12 @@ subjects:
 - kind: ServiceAccount
   name: admin-user
   namespace: kubernetes-dashboard
+EOF
 ```
 
 Once the user is created, we can get the login token:
 ```
 kubectl -n kubernetes-dashboard get secret $(kubectl -n kubernetes-dashboard get sa/admin-user -o jsonpath="{.secrets[0].name}") -o go-template="{{.data.token | base64decode}}"
-```
-
-Alternatively, it is possible to use an default token from the `kube-system` namespace, however, the RBAC for it
-is more narrow and wouldn't allow to observe all the namespaces and resources:
-```
- kubectl --namespace kube-system get secret -o name | grep default-token | xargs kubectl --namespace kube-system get -o jsonpath='{.data.token}'
 ```
 
 ## Istio
@@ -248,329 +284,3 @@ export INGRESS_HOST=$(kubectl get svc istio-ingressgateway --namespace istio-sys
 ```
 
 Now, we can verify that the deployment is exposed via the gateway at `http://$INGRESS_HOST/nginx-test`.
-
-## Secure Istio Gateways and Cert-manager
-In order to expose a service via HTTPS, it is required to configure a secure
-Istio Gateway. For this task, we will use cert-manager to issue a certificate
-for the Istio IngressGateway address and provide it to the Secure `Gateway`.
-
-To install the Cert-manager, run:
-```
-kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.6.0/cert-manager.yaml
-```
-
-### Create a Certificate Authority
-First, we need to create a CA key and certificate to provide to the Cert-manager
-`ClusterIssuer`. The CA is meant to function as an internal tool for creating certificates.
-We will use [cfssl](https://github.com/cloudflare/cfssl) but any other appropriate
-tool can be used instead.
-
-Create a CSR (Certificate Signing Request) file in json format. For example, `csr.json`:
-```json
-{
-    "CN": "Homelab, Inc.",
-    "key": {
-           "algo": "rsa",
-           "size": 2048
-    },
-    "names": [
-             {
-                    "C": "US",
-                    "L": "San Francisco",
-                    "O": "Homelab",
-                    "OU": "PVE",
-                    "ST": "California"
-             }
-    ]
-}
-```
-
-Then, run `cfssl` to generate the initial CA key and certificate:
-```
-cfssl gencert -initca csr.json | cfssljson -bare ca
-```
-
-Create a Kubernetes Secret to hold the key and certificate, as per [cert-manager docs](https://cert-manager.io/docs/configuration/ca/#deployment):
-```
-kubectl create secret tls ca-secret \
-  --cert=ca.pem \
-  --key=ca-key.pem
-```
-
-### Create an `Issuer` and issue a `Certificate` for the IngressGateway
-
-> It is important to deploy the certificate into the same namespace where the istio-ingressgateway
-is running so it can mount it. [Link to the documentation](https://istio.io/latest/docs/ops/integrations/certmanager/#istio-gateway).
-
-To create a self-signed `ClusterIssuer`, run:
-```
-kubectl apply -f - <<EOF
-apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: ca-issuer
-  namespace: istio-system
-spec:
-  ca:
-    secretName: ca-secret
-EOF
-```
-More issuer configuration options available in the [Cert-manager docs](https://cert-manager.io/docs/configuration/).
-
-Discover the `IngressGateway` IP address to use in the certificate:
-```
-export INGRESS_HOST=$(kubectl get svc istio-ingressgateway --namespace istio-system -o yaml -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-```
-
-The `Certificate` would look as follows (we'll be using the IP address from the previous step in the `ipAddresses` field):
-```
-kubectl apply -f - <<EOF
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: gateway-cert
-  namespace: istio-system
-spec:
-  secretName: gateway-cert
-  ipAddresses:
-  - "${INGRESS_HOST}"
-  duration: 2160h # 90d
-  renewBefore: 360h # 15d
-  subject:
-    organizations:
-      - Homelab
-  issuerRef:
-    name: ca-issuer
-    kind: Issuer
-EOF
-```
-
-Verify the `Certificate` is created:
-```
-kubectl get cert -o wide -n istio-system
-
-NAME           READY   SECRET         ISSUER      STATUS                                          AGE
-gateway-cert   True    gateway-cert   ca-issuer   Certificate is up to date and has not expired   5s
-```
-
-### Create a secure Istio `Gateway`
-Create a secure Istio `Gateway` that uses the certificate created at the previous step.
-The `Gateway` can be created in any namespace:
-```
-kubectl apply -f - <<EOF
-apiVersion: networking.istio.io/v1alpha3
-kind: Gateway
-metadata:
-  name: secure-gateway
-spec:
-  selector:
-    istio: ingressgateway
-  servers:
-  - port:
-      number: 443
-      name: https
-      protocol: HTTPs
-    tls:
-      mode: SIMPLE
-      credentialName: gateway-cert
-    hosts:
-    - "*"
-EOF
-```
-
-And now we need to create a `VirtualService` to route the traffic. We'll use the
-Nginx deployment from the [previous step](#example-deployment-exposed-via-istio-ingress-gateway).
-
-```
-kubectl apply -f - <<EOF
-apiVersion: networking.istio.io/v1beta1
-kind: VirtualService
-metadata:
- name: nginx-secure
-spec:
- hosts:
- - "*"
- gateways:
- - secure-gateway
- http:
- - name: "nginx-secure"
-   match:
-   - uri:
-       prefix: "/nginx-secure"
-   rewrite:
-     uri: "/"
-   route:
-   - destination:
-       host: nginx.default.svc.cluster.local
-       port:
-         number: 80
-EOF
-```
-
-Now, we can verify that the deployment is exposed via the gateway at `https://$INGRESS_HOST/nginx-secure`.
-
-## Container Attached Storage
-There is a plenty of storage solutions on Kubernetes. At the moment of writing,
-[OpenEBS](https://openebs.io/) looked like a good fit for having storage installed
-with minimal friction.
-
-For the homelab setup, a [local hostpath](https://openebs.io/docs/user-guides/localpv-hostpath)
-provisioner should be sufficient, however, OpenEBS provides multiple options for
-a replicated storage backing Persistent Volumes.
-
-To use only host-local Persistent Volumes, it is sufficient to install a lite
-version of OpenEBS:
-```
-kubectl apply -f https://openebs.github.io/charts/openebs-operator-lite.yaml
-```
-
-Once the Operator is installed, create a `StorageClass` and annotate it as **default**:
-```
-kubectl apply -f - <<EOF
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: openebs-hostpath
-  annotations:
-    storageclass.kubernetes.io/is-default-class: "true"
-    openebs.io/cas-type: local
-    cas.openebs.io/config: |
-      - name: StorageType
-        value: "hostpath"
-      - name: BasePath
-        value: "/var/openebs/local/"
-provisioner: openebs.io/local
-volumeBindingMode: WaitForFirstConsumer
-reclaimPolicy: Delete
-EOF
-```
-
-## Verifying the installation
-The following instructions are based on the official [OpenEBS documentation](https://openebs.io/docs/user-guides/localpv-hostpath#install-verification).
-
-Create a `PersistentVolumeClaim`:
-```
-kubectl apply -f - <<EOF
-kind: PersistentVolumeClaim
-apiVersion: v1
-metadata:
-  name: local-hostpath-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1G
-EOF
-```
-
-Create a `Pod` to consume the PVC:
-```
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Pod
-metadata:
-  name: test-openebs-volume
-spec:
-  volumes:
-  - name: local-storage
-    persistentVolumeClaim:
-      claimName: local-hostpath-pvc
-  containers:
-  - name: main
-    image: busybox
-    command:
-       - sh
-       - -c
-       - 'while true; do echo "`date` [`hostname`] Hello from OpenEBS Local PV." >> /mnt/store/greet.txt; sleep $(($RANDOM % 5 + 300)); done'
-    volumeMounts:
-    - mountPath: /mnt/store
-      name: local-storage
-EOF
-```
-
-Verify the data is written to the volume:
-```
-kubectl exec test-openebs-volume -- cat /mnt/store/greet.txt
-
-# Example output:
-Fri Nov 12 01:22:22 UTC 2021 [test-openebs-volume] Hello from OpenEBS Local PV.
-```
-
-You might also want to `kubectl describe pod test-openebs-volume` to check the details
-about the mounted volume.
-
-Cleanup:
-```
-kubectl delete pod test-openebs-volume
-kubectl delete pvc local-hostpath-pvc
-```
-
-## Exposing Kubernetes Dashboard via Secure Istio Gateway
-
-> WARNING: Exposing unsecured Kubernetes Dashboard that has wide permissions (e.g. allowing
-workload creation) imposes a significant risk on the infrastructure. Check out
-[On Securing the Kubernetes Dashboard](https://blog.heptio.com/on-securing-the-kubernetes-dashboard-16b09b1b7aca)
-blog post from Heptio for more details.
-
-In order to expose the Kubernetes Dashboard via Istio Ingress Gaway, it is
-important to take into account that the Dashboard is running as a HTTPS service but
-the previously deployed `Gateway` terminates TLS and sends unencrypted traffic to
-the upstream services. Istio provides a custom resource called `DestinationRule`
-that allows to define traffic and load balancing policies for the upstream services.
-
-> NOTE: In the following example, the Kubernetes Dashboard will be exposed at the
-root path of the URL: `https://<endpoint URL>/`. There doesn't seem to be a
-way of making it available at a subpath with the `VirtualService` routing rules.
-The problem with the Dashboard is that its landing page doesn't provide a config
-for a prefix and refers static assets using the root path. Please let me know if
-there's a workaround for that.
-
-First, we need to define a `VirtualService` for routing:
-```
-kubectl apply -f - <<EOF
-apiVersion: networking.istio.io/v1beta1
-kind: VirtualService
-metadata:
-  name: kubernetes-dashboard
-  namespace: kubernetes-dashboard
-spec:
-  hosts:
-  - "*"
-  gateways:
-  - default/secure-gateway
-  http:
-  - match:
-    - uri:
-        prefix: "/"
-    route:
-    - destination:
-        host: kubernetes-dashboard.kubernetes-dashboard.svc.cluster.local
-        port:
-          number: 443
-EOF
-```
-
-After that, we need to create a `DestinationRule` to enable TLS for traffic
-accessing the Dashboard Service:
-```
-kubectl apply -f - <<EOF
-apiVersion: networking.istio.io/v1beta1
-kind: DestinationRule
-metadata:
-  name: kubernetes-dashboard
-  name: kubernetes-dashboard
-spec:
-  host: kubernetes-dashboard.kubernetes-dashboard.svc.cluster.local
-  trafficPolicy:
-    tls:
-      mode: SIMPLE
-EOF
-```
-
-Now, we can access the dashboard via the gateway at `https://$INGRESS_HOST/`.
-
-A shortcut for the Ingress host discovery:
-```
-export INGRESS_HOST=$(kubectl get svc istio-ingressgateway --namespace istio-system -o yaml -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-```
