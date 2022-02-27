@@ -251,28 +251,29 @@ spec:
 ```
 
 Now, we should define the route and [create a VirtualService](https://istio.io/latest/docs/reference/config/networking/virtual-service/) to route the traffic to Nginx `Service`:
- ```
+```
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
- name: nginx
+  name: nginx
+  namespace: istio-system
 spec:
- hosts:
- - "*"
- gateways:
- - nginx-gateway
- http:
- - name: "nginx-test"
-   match:
-   - uri:
-       prefix: "/nginx-test"
-   rewrite:
-     uri: "/"
-   route:
-   - destination:
-       host: nginx.default.svc.cluster.local
-       port:
-         number: 80
+  hosts:
+    - "*"
+  gateways:
+    - shared-gateway
+  http:
+    - name: "nginx-test"
+      match:
+      - uri:
+          prefix: "/nginx-test"
+      rewrite:
+        uri: "/"
+      route:
+      - destination:
+          host: nginx.default.svc.cluster.local
+          port:
+            number: 80
 ```
 
 The `VirtualService` defines a prefix `prefix: "/nginx-test"` so that all requests
