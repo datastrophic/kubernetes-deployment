@@ -1,5 +1,5 @@
 variable "pm_api_url" {
-  default = "https://proxmox.local:8006/api2/json"
+  default = "https://192.168.2.220:8006/api2/json"
 }
 
 variable "pm_node" {
