@@ -4,15 +4,15 @@ all:
       hosts:
         control-plane.k8s.cluster:
           ansible_host: 192.168.2.221
-          ansible_user: root
+          ansible_user: ubuntu
     worker-nodes:
       hosts:
         worker-1.k8s.cluster:
           ansible_host: 192.168.2.231
-          ansible_user: root
+          ansible_user: ubuntu
         worker-2.k8s.cluster:
           ansible_host: 192.168.2.232
-          ansible_user: root
+          ansible_user: ubuntu
         worker-3.k8s.cluster:
           ansible_host: 192.168.2.233
-          ansible_user: root
+          ansible_user: ubuntu
