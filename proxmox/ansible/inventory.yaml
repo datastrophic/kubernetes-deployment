@@ -3,4 +3,5 @@ all:
     pve:
       hosts:
         proxmox-master:
-          ansible_host: proxmox.local
+          ansible_host: 192.168.2.220
+          ansible_user: root

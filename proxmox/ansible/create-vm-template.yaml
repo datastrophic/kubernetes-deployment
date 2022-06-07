@@ -8,7 +8,7 @@
       cloud_image_path: /tmp/ubuntu-2004-server-amd64.qcow2
       template_id: 1001
       template_name: ubuntu-2004-cloudinit-template
-      template_memory: 4096
+      template_memory: 1024
   tasks:
     - name : download cloud image
       get_url:
