@@ -1,0 +1,18 @@
+---
+    - hosts: pmox_node
+      become: yes
+      tasks:
+        - name: "Changing state to: {{state}}"
+          community.general.proxmox_kvm:
+            api_host: 192.168.2.220
+            api_user: ansible_sa@pam
+            api_token_id: ansible_sa_token_id
+            api_token_secret: "afb7bc32-8cab-4fa8-afe4-9ca2ef1f5056"
+            name: "{{item}}"
+            state: "{{state}}"
+            timeout: 90
+          loop:
+            - control-plane.k8s.cluster
+            - worker-1.k8s.cluster
+            - worker-2.k8s.cluster
+            - worker-3.k8s.cluster

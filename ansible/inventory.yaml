@@ -16,3 +16,8 @@ all:
         worker-3.k8s.cluster:
           ansible_host: 192.168.2.233
           ansible_user: ubuntu
+    pmox_node:
+        hosts:
+          skillstech:
+            ansible_host: 192.168.2.220
+            ansible_user: root
