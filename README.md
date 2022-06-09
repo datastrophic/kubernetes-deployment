@@ -256,11 +256,12 @@ apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
  name: nginx
+ namespace: istio-system
 spec:
  hosts:
  - "*"
  gateways:
- - nginx-gateway
+ - shared-gateway
  http:
  - name: "nginx-test"
    match:
