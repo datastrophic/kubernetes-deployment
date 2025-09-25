@@ -1,26 +1,28 @@
 resource "proxmox_vm_qemu" "control_plane" {
   count             = 1
-  name              = "control-plane-${count.index}.k8s.cluster"
+  name              = "control-plane-${count.index}-k8s-cluster"
   target_node       = "${var.pm_node}"
 
   clone             = "ubuntu-2004-cloudinit-template"
 
-  os_type           = "cloud-init"
-  cores             = 4
-  sockets           = "1"
-  cpu               = "host"
+  cpu {
+    cores             = 4
+    sockets           = 1
+    type              = "host"
+  }
+
   memory            = 2048
   scsihw            = "virtio-scsi-pci"
   bootdisk          = "scsi0"
 
   disk {
     size            = "20G"
-    type            = "scsi"
+    slot            = "scsi0"
     storage         = "local-lvm"
-    iothread        = 1
   }
 
   network {
+    id              = 0
     model           = "virtio"
     bridge          = "vmbr0"
   }
@@ -33,27 +35,30 @@ resource "proxmox_vm_qemu" "control_plane" {
 
 resource "proxmox_vm_qemu" "worker_nodes" {
   count             = 3
-  name              = "worker-${count.index}.k8s.cluster"
+  name              = "worker-${count.index}-k8s-cluster"
   target_node       = "${var.pm_node}"
 
   clone             = "ubuntu-2004-cloudinit-template"
 
-  os_type           = "cloud-init"
+  cpu {
   cores             = 4
-  sockets           = "1"
-  cpu               = "host"
+  sockets           = 1
+  type              = "host"
+  }
+  
+  
   memory            = 4098
   scsihw            = "virtio-scsi-pci"
   bootdisk          = "scsi0"
 
   disk {
     size            = "20G"
-    type            = "scsi"
+    slot            = "scsi0"
     storage         = "local-lvm"
-    iothread        = 1
   }
 
   network {
+    id              = 0
     model           = "virtio"
     bridge          = "vmbr0"
   }
